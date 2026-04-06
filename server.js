@@ -19,10 +19,10 @@ try {
 }
 
 app.use(express.json({ limit: '10mb' }));
-app.use(express.static('.'));
+app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/api/config', (req, res) => {
-  res.json(getConfig());
+  res.json(getConfig(req.headers));
 });
 
 app.post('/api/interpret', async (req, res) => {
