@@ -18,6 +18,11 @@ let renderedOutput = null;
 let generatedImageDataUrl = '';
 let iteration = 1;
 let historyImages = [];
+let appConfig = {
+  authMode: 'user-key',
+  interpretationModel: '',
+  imageModel: ''
+};
 
 // Animation state
 let animProgress = 0; // 0 to 1 for cluster animation
@@ -25,6 +30,10 @@ let pixelSamples = []; // Sampled pixels for scatter animation
 
 // UI elements
 let btnPlay, btnSendAI, btnRegenerate, btnFeedback;
+let apiKeyInput, btnSaveApiKey, btnClearApiKey;
+let authPanel;
+const API_KEY_STORAGE_KEY = 'synesthetic-loop.google-ai-studio-key';
+let authPromptForced = false;
 
 function setup() {
   const canvas = createCanvas(CANVAS_W, CANVAS_H);
@@ -40,6 +49,16 @@ function setup() {
 
   // Create buttons
   const controls = select('#controls');
+  apiKeyInput = select('#api-key-input');
+  btnSaveApiKey = select('#save-api-key');
+  btnClearApiKey = select('#clear-api-key');
+  authPanel = select('#auth-panel');
+
+  if (apiKeyInput) {
+    apiKeyInput.value(getStoredApiKey());
+  }
+  if (btnSaveApiKey) btnSaveApiKey.mousePressed(saveApiKeyFromInput);
+  if (btnClearApiKey) btnClearApiKey.mousePressed(clearStoredApiKey);
 
   btnPlay = createButton('▶ Play');
   btnPlay.parent(controls);
@@ -69,6 +88,8 @@ function setup() {
 
   setStatus('Drop an image or click Play to start with default');
   updateInterpretationPanel();
+  refreshAuthPanel();
+  loadAppConfig();
 
   // Try loading default image
   loadImage('assets/source.jpg', img => {
@@ -475,15 +496,25 @@ async function requestGeneratedImage(payload) {
   state = 'WAITING';
 
   try {
+    const headers = { 'Content-Type': 'application/json' };
+    const userApiKey = getStoredApiKey();
+    if (userApiKey) {
+      headers['X-Google-AI-Studio-Key'] = userApiKey;
+    }
+
     const resp = await fetch('/api/interpret', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(payload)
     });
 
     const data = await resp.json();
-    if (data.error) {
+    if (!resp.ok || data.error) {
       setStatus('AI error: ' + data.error);
+      if (resp.status === 401 || resp.status === 403) {
+        authPromptForced = true;
+        refreshAuthPanel('That API key was rejected. Enter a valid Google AI Studio key to continue.');
+      }
       btnSendAI.removeAttribute('disabled');
       return;
     }
@@ -665,6 +696,96 @@ function loadP5Image(dataUrl) {
 
 function setStatus(msg) {
   select('#status').html(msg);
+}
+
+async function loadAppConfig() {
+  try {
+    const resp = await fetch('/api/config');
+    if (!resp.ok) return;
+    appConfig = await resp.json();
+  } catch (err) {
+    console.warn('Failed to load app config:', err);
+  }
+  refreshAuthPanel();
+}
+
+function getStoredApiKey() {
+  try {
+    return window.localStorage.getItem(API_KEY_STORAGE_KEY) || '';
+  } catch (err) {
+    console.warn('localStorage unavailable:', err);
+    return '';
+  }
+}
+
+function setStoredApiKey(apiKey) {
+  try {
+    window.localStorage.setItem(API_KEY_STORAGE_KEY, apiKey);
+  } catch (err) {
+    console.warn('Unable to store API key locally:', err);
+  }
+}
+
+function removeStoredApiKey() {
+  try {
+    window.localStorage.removeItem(API_KEY_STORAGE_KEY);
+  } catch (err) {
+    console.warn('Unable to clear API key:', err);
+  }
+}
+
+function maskApiKey(apiKey) {
+  if (!apiKey) return 'not set';
+  if (apiKey.length <= 8) return 'saved';
+  return `${apiKey.slice(0, 4)}...${apiKey.slice(-4)}`;
+}
+
+function saveApiKeyFromInput() {
+  const apiKey = String(apiKeyInput?.value() || '').trim();
+  if (!/^[A-Za-z0-9_-]{20,}$/.test(apiKey)) {
+    authPromptForced = true;
+    refreshAuthPanel('That does not look like a valid Google AI Studio API key.');
+    return;
+  }
+
+  setStoredApiKey(apiKey);
+  authPromptForced = false;
+  refreshAuthPanel('Personal API key saved in this browser.');
+}
+
+function clearStoredApiKey() {
+  removeStoredApiKey();
+  if (apiKeyInput) apiKeyInput.value('');
+  authPromptForced = true;
+  refreshAuthPanel('Saved API key cleared from this browser.');
+}
+
+function refreshAuthPanel(message) {
+  const modeCopy = select('#auth-mode-copy');
+  const authStatus = select('#auth-status');
+  const storedApiKey = getStoredApiKey();
+  const shouldShowPanel = authPromptForced || !storedApiKey;
+
+  if (modeCopy) {
+    if (appConfig.authMode === 'server-key') {
+      modeCopy.html('This deployment has a server-managed Google AI key. You can use the app without entering your own key, or override it with your own quota by pasting a personal Google AI Studio key below.');
+    } else {
+      modeCopy.html('This publishable build does not include any shared secret. To generate AI output, paste your own Google AI Studio API key below so usage stays tied to your own account.');
+    }
+  }
+
+  if (authPanel) {
+    authPanel.toggleClass('hidden', !shouldShowPanel);
+  }
+
+  if (authStatus) {
+    const baseStatus = storedApiKey
+      ? `Browser key saved: ${escapeHtml(maskApiKey(storedApiKey))}`
+      : (appConfig.authMode === 'server-key'
+        ? 'No browser key saved. Server-managed access is available.'
+        : 'No browser key saved yet.');
+    authStatus.html(message ? `${escapeHtml(message)}<br>${baseStatus}` : baseStatus);
+  }
 }
 
 function updateInterpretationPanel() {

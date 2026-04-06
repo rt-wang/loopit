@@ -1,4 +1,27 @@
-This is the description of the project:
-The pipeline
-Input image → K-means on pixels → Pentatonic mapping → Audio score → Multimodal LLM → Output image
-You're right that this involves a multimodal model. Specifically, you'd use a model that accepts audio (or a visual representation of the score) and outputs a text description, which you then render. Claude doesn't process audio directly, but you have a few options: use the Gemini API which accepts audio natively, convert your audio to a spectrogram image and send that to any vision model, or send the structured text notation. The spectrogram route is actually elegant — it's itself a visual representation of sound, so you're going image → sound → image-of-sound → AI → new image. That's a rich chain of transformations to document.
+## Synesthetic Loop
+
+Input image -> K-means on pixels -> pentatonic mapping -> audio score -> Gemini interpretation -> generated image
+
+### Publishable credential setup
+
+This repo is now safe to publish without shipping any shared API secret.
+
+- Public/publishable mode: each visitor brings their own Google AI Studio API key in the app UI. The key is stored only in that browser's local storage and sent only when the user requests generation.
+- Private/self-hosted mode: set `GOOGLE_API_KEY` on the server and the app will use that deployment-managed key automatically.
+
+### Local run
+
+1. Install dependencies with `npm install`.
+2. Optional: create a `.env` file from `.env.example` if you want a server-managed key.
+3. Start the app with `npm start`.
+4. Open [http://localhost:3000](http://localhost:3000).
+
+### Google AI Studio
+
+Create a personal API key in [Google AI Studio](https://aistudio.google.com/app/apikey).
+
+### Environment variables
+
+- `GOOGLE_API_KEY`: optional server-side Gemini key for private deployments
+- `GEMINI_MODEL`: optional text model override, defaults to `gemini-2.5-flash`
+- `NANO_BANANA_MODEL`: optional image model override, defaults to `gemini-3.1-flash-image-preview`

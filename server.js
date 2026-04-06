@@ -14,7 +14,7 @@ try {
     }
   });
 } catch (e) {
-  console.warn('.env file not found — set ANTHROPIC_API_KEY or GOOGLE_API_KEY as environment variable');
+  console.warn('.env file not found — set GOOGLE_API_KEY as an environment variable if you want a server-managed key');
 }
 
 app.use(express.json({ limit: '10mb' }));
@@ -70,6 +70,44 @@ Also return a short one-sentence caption describing the generated image.`;
 
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 const NANO_BANANA_MODEL = process.env.NANO_BANANA_MODEL || 'gemini-3.1-flash-image-preview';
+
+function getRequestApiKey(req) {
+  const bearer = req.get('authorization');
+  const headerKey = req.get('x-google-ai-studio-key');
+  const rawValue = headerKey || (bearer && bearer.startsWith('Bearer ') ? bearer.slice(7) : '');
+  const apiKey = String(rawValue || '').trim();
+
+  if (!apiKey) return '';
+  if (!/^[A-Za-z0-9_-]{20,}$/.test(apiKey)) {
+    return '';
+  }
+
+  return apiKey;
+}
+
+function getEffectiveApiKey(req) {
+  return process.env.GOOGLE_API_KEY || getRequestApiKey(req);
+}
+
+async function googleGenerateContent(model, body, apiKey) {
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    }
+  );
+
+  const data = await response.json();
+  if (!response.ok || data.error) {
+    const error = new Error(data.error?.message || `Google AI request failed for model ${model}`);
+    error.status = response.status || 500;
+    throw error;
+  }
+
+  return data;
+}
 
 function extractTextAndImage(data) {
   const parts = data?.candidates?.[0]?.content?.parts || [];
@@ -139,32 +177,21 @@ function buildVariationHint() {
   return `${subject} ${framing} ${palette} ${texture}`;
 }
 
-async function generateImageFromInterpretation(interpretation) {
-  const imageResponse = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${NANO_BANANA_MODEL}:generateContent?key=${process.env.GOOGLE_API_KEY}`,
+async function generateImageFromInterpretation(interpretation, apiKey) {
+  const imageData = await googleGenerateContent(
+    NANO_BANANA_MODEL,
     {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        generationConfig: {
-          responseModalities: ['TEXT', 'IMAGE']
-        },
-        contents: [{
-          parts: [
-            { text: buildImagePrompt(interpretation) },
-          ]
-        }]
-      })
-    }
+      generationConfig: {
+        responseModalities: ['TEXT', 'IMAGE']
+      },
+      contents: [{
+        parts: [
+          { text: buildImagePrompt(interpretation) },
+        ]
+      }]
+    },
+    apiKey
   );
-
-  const imageData = await imageResponse.json();
-  if (!imageResponse.ok || imageData.error) {
-    console.error('Nano Banana error:', JSON.stringify(imageData.error));
-    const error = new Error(imageData.error?.message || `Nano Banana request failed for model ${NANO_BANANA_MODEL}`);
-    error.status = imageResponse.status || 500;
-    throw error;
-  }
 
   const generated = extractTextAndImage(imageData);
   if (!generated.image) {
@@ -176,6 +203,14 @@ async function generateImageFromInterpretation(interpretation) {
   return generated;
 }
 
+app.get('/api/config', (req, res) => {
+  res.json({
+    authMode: process.env.GOOGLE_API_KEY ? 'server-key' : 'user-key',
+    interpretationModel: GEMINI_MODEL,
+    imageModel: NANO_BANANA_MODEL
+  });
+});
+
 app.post('/api/interpret', async (req, res) => {
   const { musicSummary, interpretation } = req.body;
   if (!musicSummary && !interpretation) {
@@ -183,58 +218,49 @@ app.post('/api/interpret', async (req, res) => {
   }
 
   try {
-    if (process.env.GOOGLE_API_KEY) {
-      let finalInterpretation = (interpretation || '').trim();
-
-      if (!finalInterpretation) {
-        const interpretationResponse = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${process.env.GOOGLE_API_KEY}`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              systemInstruction: { parts: [{ text: INTERPRETATION_PROMPT }] },
-              contents: [{
-                parts: [
-                  { text: musicSummary }
-                ]
-              }]
-            })
-          }
-        );
-
-        const interpretationData = await interpretationResponse.json();
-        if (!interpretationResponse.ok || interpretationData.error) {
-          console.error('Gemini interpretation error:', JSON.stringify(interpretationData.error));
-          return res.status(interpretationResponse.status || 500).json({
-            error: interpretationData.error?.message || `Gemini interpretation request failed for model ${GEMINI_MODEL}`
-          });
-        }
-
-        finalInterpretation = extractText(interpretationData).trim();
-        if (!finalInterpretation) {
-          return res.status(500).json({ error: 'Interpretation model returned no text.' });
-        }
-      }
-
-      const generated = await generateImageFromInterpretation(finalInterpretation);
-
-      console.log('Interpretation model:', GEMINI_MODEL);
-      console.log('Image model:', NANO_BANANA_MODEL);
-      return res.json({
-        interpretation: finalInterpretation,
-        caption: generated.text,
-        image: generated.image,
-        interpretationModel: GEMINI_MODEL,
-        imageModel: NANO_BANANA_MODEL
+    const apiKey = getEffectiveApiKey(req);
+    if (!apiKey) {
+      return res.status(401).json({
+        error: 'No Google AI Studio API key is available. Add GOOGLE_API_KEY on the server or provide your own key in the app.'
       });
-
-    } else {
-      return res.status(500).json({ error: 'No API key configured. Set ANTHROPIC_API_KEY or GOOGLE_API_KEY in .env' });
     }
+
+    let finalInterpretation = (interpretation || '').trim();
+
+    if (!finalInterpretation) {
+      const interpretationData = await googleGenerateContent(
+        GEMINI_MODEL,
+        {
+          systemInstruction: { parts: [{ text: INTERPRETATION_PROMPT }] },
+          contents: [{
+            parts: [
+              { text: musicSummary }
+            ]
+          }]
+        },
+        apiKey
+      );
+
+      finalInterpretation = extractText(interpretationData).trim();
+      if (!finalInterpretation) {
+        return res.status(500).json({ error: 'Interpretation model returned no text.' });
+      }
+    }
+
+    const generated = await generateImageFromInterpretation(finalInterpretation, apiKey);
+
+    console.log('Interpretation model:', GEMINI_MODEL);
+    console.log('Image model:', NANO_BANANA_MODEL);
+    return res.json({
+      interpretation: finalInterpretation,
+      caption: generated.text,
+      image: generated.image,
+      interpretationModel: GEMINI_MODEL,
+      imageModel: NANO_BANANA_MODEL
+    });
   } catch (err) {
     console.error('API error:', err);
-    return res.status(500).json({ error: err.message });
+    return res.status(err.status || 500).json({ error: err.message });
   }
 });
 

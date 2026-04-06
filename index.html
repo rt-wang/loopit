@@ -28,6 +28,58 @@
     }
     #header h1 { font-size: 18px; letter-spacing: 2px; }
     #header span { font-size: 14px; color: #888; }
+    #auth-panel {
+      width: 100%;
+      max-width: 640px;
+      border: 1px solid #333;
+      background: #171717;
+      color: #ddd;
+      padding: 14px;
+      margin-bottom: 16px;
+    }
+    #auth-panel.hidden {
+      display: none;
+    }
+    #auth-panel h2 {
+      font-size: 12px;
+      letter-spacing: 1px;
+      color: #8f8f8f;
+      margin-bottom: 8px;
+    }
+    #auth-panel p,
+    #auth-panel label,
+    #auth-panel a,
+    #auth-panel input {
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    #auth-panel a {
+      color: #9dc7ff;
+    }
+    .auth-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    #api-key-input {
+      flex: 1 1 280px;
+      min-width: 220px;
+      background: #101010;
+      color: #f2f2f2;
+      border: 1px solid #444;
+      padding: 10px 12px;
+      font-family: 'Courier New', monospace;
+    }
+    #auth-help {
+      margin-top: 8px;
+      color: #999;
+    }
+    #auth-status {
+      margin-top: 8px;
+      color: #cfcfcf;
+    }
     #canvas-container { position: relative; }
     .btn {
       background: #333;
@@ -101,6 +153,19 @@
   <div id="header">
     <h1>SYNESTHETIC LOOP</h1>
     <span id="iteration-label">iteration: 1</span>
+  </div>
+  <div id="auth-panel">
+    <h2>GOOGLE AI STUDIO ACCESS</h2>
+    <p id="auth-mode-copy">Checking AI access mode...</p>
+    <div class="auth-row">
+      <input id="api-key-input" type="password" autocomplete="off" spellcheck="false" placeholder="Paste your Google AI Studio API key">
+      <button id="save-api-key" class="btn" type="button">Use Key</button>
+      <button id="clear-api-key" class="btn" type="button">Clear Key</button>
+    </div>
+    <div id="auth-help">
+      Create a personal key in <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer">Google AI Studio</a>. Your key stays in this browser and is sent only when you request generation.
+    </div>
+    <div id="auth-status"></div>
   </div>
   <div id="drop-zone">Drop an image here or click Play to use default</div>
   <div id="canvas-container"></div>
