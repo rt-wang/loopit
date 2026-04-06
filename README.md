@@ -16,6 +16,13 @@ This repo is now safe to publish without shipping any shared API secret.
 3. Start the app with `npm start`.
 4. Open [http://localhost:3000](http://localhost:3000).
 
+### Vercel deploy
+
+Vercel serves the frontend as static files and uses the serverless handlers in `api/config.js` and `api/interpret.js` for AI requests.
+
+- If you want a shared deployment key, add `GOOGLE_API_KEY` in the Vercel project environment variables.
+- If you do not add one, users can still bring their own Google AI Studio key in the app UI.
+
 ### Google AI Studio
 
 Create a personal API key in [Google AI Studio](https://aistudio.google.com/app/apikey).
