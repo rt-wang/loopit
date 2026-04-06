@@ -1,6 +1,9 @@
-const { interpretAndGenerate } = require('../lib/ai');
+import { createRequire } from 'node:module';
 
-module.exports = async function handler(req, res) {
+const require = createRequire(import.meta.url);
+const { interpretAndGenerate } = require('../lib/ai.js');
+
+export default async function handler(req, res) {
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST');
     return res.status(405).json({ error: 'Method not allowed' });
@@ -17,4 +20,4 @@ module.exports = async function handler(req, res) {
   } catch (err) {
     return res.status(err.status || 500).json({ error: err.message });
   }
-};
+}

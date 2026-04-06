@@ -18,7 +18,7 @@ This repo is now safe to publish without shipping any shared API secret.
 
 ### Vercel deploy
 
-Vercel serves the frontend as static files and uses the serverless handlers in `api/config.js` and `api/interpret.js` for AI requests.
+Vercel serves the frontend as static files and uses the serverless handlers in `api/config.mjs` and `api/interpret.mjs` for AI requests.
 
 - If you want a shared deployment key, add `GOOGLE_API_KEY` in the Vercel project environment variables.
 - If you do not add one, users can still bring their own Google AI Studio key in the app UI.
