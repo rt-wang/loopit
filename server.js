@@ -15,7 +15,7 @@ try {
     }
   });
 } catch (e) {
-  console.warn('.env file not found — set GOOGLE_API_KEY as an environment variable if you want a server-managed key');
+  // .env is optional: public deployments can rely on per-user keys from the client.
 }
 
 app.use(express.json({ limit: '10mb' }));

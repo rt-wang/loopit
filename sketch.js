@@ -90,14 +90,7 @@ function setup() {
   updateInterpretationPanel();
   refreshAuthPanel();
   loadAppConfig();
-
-  // Try loading default image
-  loadImage('assets/source.jpg', img => {
-    sourceImage = img;
-    setStatus('Image loaded. Click Play to begin.');
-  }, () => {
-    setStatus('No default image found. Drop an image to begin.');
-  });
+  setStatus('Drop an image to begin.');
 }
 
 function draw() {
